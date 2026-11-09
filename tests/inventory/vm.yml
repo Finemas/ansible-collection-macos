@@ -1,0 +1,8 @@
+---
+all:
+  hosts:
+    macos-test:
+      ansible_host: 127.0.0.1
+      ansible_user: admin
+      ansible_password: admin
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null

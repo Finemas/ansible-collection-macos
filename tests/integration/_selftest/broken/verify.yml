@@ -1,0 +1,8 @@
+---
+- name: Selftest verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Nothing to verify
+      ansible.builtin.debug:
+        msg: ok

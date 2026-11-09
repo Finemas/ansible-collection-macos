@@ -1,0 +1,65 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: pip install ansible-core ansible-lint yamllint
+      - name: Install dependencies
+        run: ansible-galaxy collection install community.general
+      - run: yamllint .
+      - run: ansible-lint
+      - run: ansible-galaxy collection build --force
+
+  harness:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ansible-core
+        run: pip install ansible-core
+      - name: Selftest passes
+        run: tests/run.sh _selftest
+      - name: Broken scenario is detected
+        run: |
+          if tests/run.sh _selftest broken; then
+            echo "broken scenario unexpectedly passed" >&2
+            exit 1
+          fi
+
+  scenarios:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.find.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        run: |
+          matrix="$(find tests/integration -mindepth 2 -maxdepth 2 -type d \
+            -not -path 'tests/integration/_*' \
+            | sed 's|tests/integration/||' \
+            | jq -R 'split("/") | {role: .[0], scenario: .[1]}' \
+            | jq -sc '{include: .}')"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  integration:
+    needs: scenarios
+    if: ${{ fromJSON(needs.scenarios.outputs.matrix).include[0] != null }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.scenarios.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: pip install ansible-core
+      - name: Install dependencies
+        run: ansible-galaxy collection install community.general
+      - run: tests/run.sh ${{ matrix.role }} ${{ matrix.scenario }} --inventory localhost

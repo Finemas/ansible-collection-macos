@@ -1,0 +1,27 @@
+---
+namespace: finemas
+name: macos
+version: 0.1.0
+readme: README.md
+authors:
+  - Jan Provazník
+description: Set up an Apple Silicon Mac with Homebrew, macOS defaults, dotfiles and launchd ansible-pull.
+license:
+  - MIT
+repository: https://github.com/Finemas/ansible-collection-macos
+issues: https://github.com/Finemas/ansible-collection-macos/issues
+tags:
+  - tools
+  - macos
+  - homebrew
+  - dotfiles
+  - launchd
+dependencies:
+  community.general: ">=13.0.0,<14.0.0"
+build_ignore:
+  - tests
+  - .github
+  - "*.tar.gz"
+  - .ansible-lint
+  - .yamllint
+  - .gitignore

@@ -1,0 +1,7 @@
+---
+- name: Selftest converge that is never idempotent
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Always report changed
+      ansible.builtin.command: date  # noqa: no-changed-when

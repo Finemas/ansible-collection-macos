@@ -1,0 +1,13 @@
+---
+- name: Selftest verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Stat marker file
+      ansible.builtin.stat:
+        path: "{{ lookup('env', 'TMPDIR') | default('/tmp', true) }}/macos-selftest"
+      register: marker
+
+    - name: Assert marker file exists
+      ansible.builtin.assert:
+        that: marker.stat.exists

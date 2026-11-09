@@ -1,0 +1,10 @@
+---
+- name: Selftest converge
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Write marker file
+      ansible.builtin.copy:
+        content: "selftest\n"
+        dest: "{{ lookup('env', 'TMPDIR') | default('/tmp', true) }}/macos-selftest"
+        mode: "0644"
