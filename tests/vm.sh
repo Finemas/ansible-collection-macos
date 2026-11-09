@@ -10,7 +10,7 @@ inv="$root/tests/inventory/vm.yml"
 case "${1:-}" in
   up)
     image="${2:-$default_image}"
-    tart list --quiet | grep -qx "$name" || tart clone "$image" "$name"
+    tart list --quiet | grep -x "$name" >/dev/null || tart clone "$image" "$name"
     nohup tart run --no-graphics "$name" >/dev/null 2>&1 &
     ip="$(tart ip --wait 120 "$name")"
     cat >"$inv" <<EOF
@@ -28,6 +28,7 @@ EOF
   down)
     tart stop "$name" || true
     tart delete "$name" || true
+    rm -f "$inv"
     ;;
   *)
     echo "Usage: $0 up|down [image]" >&2

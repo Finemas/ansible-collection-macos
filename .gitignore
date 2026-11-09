@@ -1,3 +1,4 @@
 *.tar.gz
 .ansible/
 .DS_Store
+tests/inventory/vm.yml

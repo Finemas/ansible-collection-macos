@@ -11,8 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Install tooling
-        run: pip install ansible-core ansible-lint yamllint
+        run: pip install "ansible-core~=2.21.0" ansible-lint yamllint
       - name: Install dependencies
         run: ansible-galaxy collection install community.general
       - run: yamllint .
@@ -23,16 +26,20 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Install ansible-core
-        run: pip install ansible-core
+        run: pip install "ansible-core~=2.21.0"
       - name: Selftest passes
         run: tests/run.sh _selftest
       - name: Broken scenario is detected
         run: |
-          if tests/run.sh _selftest broken; then
+          if out="$(tests/run.sh _selftest broken 2>&1)"; then
             echo "broken scenario unexpectedly passed" >&2
             exit 1
           fi
+          grep -q "Idempotence failed" <<<"$out" || { echo "$out"; echo "missing 'Idempotence failed'" >&2; exit 1; }
 
   scenarios:
     runs-on: ubuntu-latest
@@ -58,8 +65,11 @@ jobs:
       matrix: ${{ fromJSON(needs.scenarios.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Install tooling
-        run: pip install ansible-core
+        run: pip install "ansible-core~=2.21.0"
       - name: Install dependencies
         run: ansible-galaxy collection install community.general
       - run: tests/run.sh ${{ matrix.role }} ${{ matrix.scenario }} --inventory localhost

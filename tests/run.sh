@@ -24,7 +24,10 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dir="$root/tests/integration/$role/$scenario"
 inv="$root/tests/inventory/$inventory.yml"
 [[ -f "$dir/converge.yml" && -f "$dir/verify.yml" ]] || { echo "No scenario: $dir" >&2; exit 2; }
-[[ -f "$inv" ]] || { echo "No inventory: $inv" >&2; exit 2; }
+if [[ ! -f "$inv" ]]; then
+  [[ "$inventory" == vm ]] && echo "No $inv: run tests/vm.sh up first" >&2 || echo "No inventory: $inv" >&2
+  exit 2
+fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/macos-tests.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -32,9 +35,7 @@ trap 'rm -rf "$work"' EXIT
 # The repo dir name differs from the collection name, so expose it under the FQCN.
 mkdir -p "$work/collections/ansible_collections/finemas"
 ln -s "$root" "$work/collections/ansible_collections/finemas/macos"
-export ANSIBLE_COLLECTIONS_PATH="$work/collections"
-export ANSIBLE_HOME="${ANSIBLE_HOME:-$work/ansible-home}"
-export ANSIBLE_LOCAL_TMP="${ANSIBLE_LOCAL_TMP:-$ANSIBLE_HOME/tmp}"
+export ANSIBLE_COLLECTIONS_PATH="$work/collections${ANSIBLE_COLLECTIONS_PATH:+:$ANSIBLE_COLLECTIONS_PATH}:${ANSIBLE_HOME:-$HOME/.ansible}/collections"
 export ANSIBLE_FORCE_COLOR=0
 export ANSIBLE_NOCOLOR=1
 
