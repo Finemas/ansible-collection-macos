@@ -1,34 +1,36 @@
 ---
-# The installer refuses to run as root but needs passwordless sudo in
-# NONINTERACTIVE mode, so grant it temporarily and run the script as the user.
-- name: Install Homebrew with temporary passwordless sudo
+# The installer refuses root and, in NONINTERACTIVE mode, only uses sudo via SUDO_ASKPASS.
+- name: Install Homebrew
   block:
-    - name: Grant temporary passwordless sudo
+    - name: Create private temp dir
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: homebrew-install.
+      register: homebrew_tmp
+
+    - name: Write askpass helper
       ansible.builtin.copy:
-        content: "{{ ansible_facts['user_id'] }} ALL=(ALL) NOPASSWD: ALL\n"
-        dest: /etc/sudoers.d/ansible-homebrew
-        owner: root
-        group: wheel
-        mode: "0440"
-        validate: /usr/sbin/visudo -cf %s
-      become: true
+        content: "#!/bin/sh\nprintf '%s\\n' {{ (ansible_become_password | default('')) | string | quote }}\n"
+        dest: "{{ homebrew_tmp.path }}/askpass.sh"
+        mode: "0700"
+      no_log: true
 
     - name: Download installer
       ansible.builtin.get_url:
         url: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
-        dest: "{{ ansible_facts['env']['TMPDIR'] | default('/tmp', true) }}/homebrew-install.sh"
-        mode: "0755"
-      register: homebrew_installer
+        dest: "{{ homebrew_tmp.path }}/install.sh"
+        mode: "0700"
 
     - name: Run installer
-      ansible.builtin.command: /bin/bash {{ homebrew_installer.dest }}
+      ansible.builtin.command: /bin/bash {{ homebrew_tmp.path }}/install.sh
       environment:
         NONINTERACTIVE: "1"
+        SUDO_ASKPASS: "{{ homebrew_tmp.path }}/askpass.sh"
       args:
         creates: "{{ homebrew_prefix }}/bin/brew"
   always:
-    - name: Revoke temporary passwordless sudo
+    - name: Remove temp dir
       ansible.builtin.file:
-        path: /etc/sudoers.d/ansible-homebrew
+        path: "{{ homebrew_tmp.path }}"
         state: absent
-      become: true
+      when: homebrew_tmp.path is defined
