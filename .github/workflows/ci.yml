@@ -9,8 +9,16 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      # FQCN finemas.macos.* in test playbooks resolves only in this layout.
+      ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}:~/.ansible/collections
+    defaults:
+      run:
+        working-directory: ansible_collections/finemas/macos
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: ansible_collections/finemas/macos
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
