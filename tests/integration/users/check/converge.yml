@@ -1,0 +1,46 @@
+---
+# Builds a drifted state only; verify.yml runs probe.yml in check mode against it.
+- name: Converge users check fixtures
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Look up fixture account drifter
+      ansible.builtin.command: dscl . -read /Users/drifter UniqueID
+      register: users_drifter
+      changed_when: false
+      failed_when: false
+
+    - name: Create fixture account drifter (hidden)
+      ansible.builtin.user:
+        name: drifter
+        password: Test-Pass-1
+        hidden: true
+      no_log: true
+      changed_when: false
+      when: users_drifter.rc != 0
+
+    - name: Check drifter admin membership
+      ansible.builtin.command: dseditgroup -o checkmember -m drifter admin
+      register: users_drifter_member
+      changed_when: false
+      failed_when: false
+
+    - name: Make drifter an admin
+      ansible.builtin.command: dseditgroup -o edit -a drifter -t user admin
+      changed_when: false
+      when: users_drifter_member.stdout is not match('^yes ')
+
+    - name: Look up fixture account leaver
+      ansible.builtin.command: dscl . -read /Users/leaver UniqueID
+      register: users_leaver
+      changed_when: false
+      failed_when: false
+
+    - name: Create fixture account leaver
+      ansible.builtin.user:
+        name: leaver
+        password: Test-Pass-1
+      no_log: true
+      changed_when: false
+      when: users_leaver.rc != 0

@@ -1,0 +1,38 @@
+---
+- name: Verify users check mode reports drift without mutating
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Run the probe playbook in check mode
+      ansible.builtin.command:
+        argv: [ansible-playbook, --check, --diff, -i, "{{ inventory_file }}", "{{ playbook_dir }}/probe.yml"]
+      become: false
+      delegate_to: localhost
+      environment:
+        ANSIBLE_NOCOLOR: "1"
+      register: check_run
+      changed_when: false
+
+    - name: Read drifter IsHidden
+      ansible.builtin.command: dscl . -read /Users/drifter IsHidden
+      register: hidden
+      changed_when: false
+
+    - name: Check drifter admin membership
+      ansible.builtin.command: dseditgroup -o checkmember -m drifter admin
+      register: member
+      changed_when: false
+      failed_when: false
+
+    - name: Look up leaver
+      ansible.builtin.command: dscl . -read /Users/leaver UniqueID
+      changed_when: false
+
+    - name: Assert drift is reported and nothing was mutated
+      ansible.builtin.assert:
+        that:
+          - check_run.stdout is search('changed=([3-9]|[1-9][0-9]) +unreachable=0 +failed=0')
+          - hidden.stdout.split()[-1] == '1'
+          - member.stdout is match('^yes ')
+        quiet: true

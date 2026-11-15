@@ -9,7 +9,10 @@
     users_nonadmin_names: >-
       {{ (users_accounts | rejectattr('admin', 'defined') | map(attribute='name') | list)
       + (users_accounts | selectattr('admin', 'defined') | rejectattr('admin') | map(attribute='name') | list) }}
-    users_guarded: "{{ users_guard_accounts | reject('equalto', '') | list }}"
+
+- name: Derive guarded accounts
+  ansible.builtin.set_fact:
+    users_guarded: "{{ (users_guard_accounts + [users_connection_user]) | reject('equalto', '') | unique | list }}"
 
 - name: Refuse to remove admin from the connection user
   ansible.builtin.fail:
@@ -120,6 +123,16 @@
   changed_when: true
   when: (item.stdout is match('^yes ')) != (item.item.admin | default(false) | bool)
 
+# Command tasks are skipped in check mode, so pending changes are reported by a harmless probe that always reports changed.
+- name: Report pending admin changes (check mode)
+  ansible.builtin.command: /usr/bin/true
+  loop: "{{ users_membership.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  check_mode: false
+  changed_when: true
+  when: ansible_check_mode and (item.stdout is match('^yes ')) != (item.item.admin | default(false) | bool)
+
 - name: Read hidden flags
   ansible.builtin.command: dscl . -read /Users/{{ item.name }} IsHidden
   loop: "{{ users_live }}"
@@ -137,6 +150,15 @@
     label: "{{ item.item.name }}"
   changed_when: true
   when: (item.rc == 0 and item.stdout.split()[-1] == '1') != (item.item.hidden | default(false) | bool)
+
+- name: Report pending hidden changes (check mode)
+  ansible.builtin.command: /usr/bin/true
+  loop: "{{ users_hidden.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  check_mode: false
+  changed_when: true
+  when: ansible_check_mode and (item.rc == 0 and item.stdout.split()[-1] == '1') != (item.item.hidden | default(false) | bool)
 
 - name: Look up home directories
   ansible.builtin.command: dscl . -read /Users/{{ item.name }} NFSHomeDirectory
@@ -186,6 +208,15 @@
     label: "{{ item.item }}"
   changed_when: true
   when: item.rc == 0
+
+- name: Report pending deletions (check mode)
+  ansible.builtin.command: /usr/bin/true
+  loop: "{{ users_doomed.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  check_mode: false
+  changed_when: true
+  when: ansible_check_mode and item.rc == 0
 
 # sysadminctl exits 0 on many failures.
 - name: Confirm deletion
