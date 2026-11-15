@@ -1,0 +1,27 @@
+---
+- name: Converge users default
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    # Runner images ship unknown human accounts (runner, admin); ignore whatever exists before the fixtures.
+    - name: Record existing human accounts
+      ansible.builtin.shell: |
+        set -o pipefail
+        dscl . -list /Users UniqueID | awk '$2 >= 500 && $1 !~ /^_/ {print $1}'
+      args:
+        executable: /bin/bash
+      register: users_recorded
+      changed_when: false
+
+    - name: Apply role
+      ansible.builtin.include_role:
+        name: finemas.macos.users
+      vars:
+        users_initial_password: Test-Pass-1
+        users_accounts:
+          - name: alice
+            hidden: true
+            ssh_authorized_keys:
+              - ssh-ed25519 AAAATEST alice@test
+        users_ignore: "{{ users_recorded.stdout_lines }}"

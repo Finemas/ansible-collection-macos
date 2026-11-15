@@ -1,0 +1,28 @@
+---
+- name: Verify users absent
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Look up bob
+      ansible.builtin.command: dscl . -read /Users/bob UniqueID
+      register: bob
+      changed_when: false
+      failed_when: false
+
+    - name: Look up bob home
+      ansible.builtin.stat:
+        path: /Users/bob
+      register: bob_home
+
+    - name: Assert bob is gone and the home is kept
+      ansible.builtin.assert:
+        that:
+          - bob.rc != 0
+          - bob_home.stat.exists
+        quiet: true
+
+    - name: Remove kept home so the scenario can run again
+      ansible.builtin.file:
+        path: /Users/bob
+        state: absent

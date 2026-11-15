@@ -1,0 +1,62 @@
+---
+argument_specs:
+  main:
+    short_description: Manage local user accounts, admin membership, hidden flags, SSH keys and removal
+    options:
+      users_accounts:
+        type: list
+        elements: dict
+        default: []
+        description: >-
+          Declared accounts. Missing ones are created with C(users_initial_password); existing ones are reconciled.
+          Created accounts get no secure token (FileVault unlock) in 0.1.
+        options:
+          name:
+            type: str
+            required: true
+            description: Short account name.
+          admin:
+            type: bool
+            default: false
+            description: Member of the C(admin) group. C(false) removes the membership.
+          hidden:
+            type: bool
+            default: false
+            description: Hide the account from the login window.
+          ssh_authorized_keys:
+            type: list
+            elements: str
+            description: Exact content of C(~/.ssh/authorized_keys). Omit to leave the file untouched.
+      users_absent:
+        type: list
+        elements: str
+        default: []
+        description: Accounts to delete with C(sysadminctl -deleteUser). Not the connection user or a guarded account.
+      users_ignore:
+        type: list
+        elements: str
+        default: []
+        description: Human accounts exempt from the drift check.
+      users_uid_min:
+        type: int
+        default: 500
+        description: Lowest UID treated as a human account by the drift check. Names starting with an underscore are never human.
+      users_absent_keep_home:
+        type: bool
+        default: true
+        description: Keep the home directory of deleted accounts.
+      users_initial_password:
+        type: str
+        no_log: true
+        description: Password for accounts the role has to create. Needed only then; never changed on existing accounts.
+      users_autologin:
+        type: str
+        default: ""
+        description: Assert-only. Fail when C(autoLoginUser) in the loginwindow preferences differs. Empty skips the check.
+      users_guard_accounts:
+        type: list
+        elements: str
+        default: ["{{ ansible_facts['user_id'] | default('') }}"]
+        description: >-
+          Accounts that must keep admin and must not be deleted. The connection user (C(ansible_user), else the effective user)
+          is always guarded; in pull mode that is root, so name the real admin here.

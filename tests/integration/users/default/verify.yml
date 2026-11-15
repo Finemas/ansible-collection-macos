@@ -1,0 +1,39 @@
+---
+- name: Verify users default
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Read alice UniqueID
+      ansible.builtin.command: dscl . read /Users/alice UniqueID
+      changed_when: false
+
+    - name: Read alice IsHidden
+      ansible.builtin.command: dscl . read /Users/alice IsHidden
+      register: hidden
+      changed_when: false
+
+    - name: Check alice admin membership
+      ansible.builtin.command: dseditgroup -o checkmember -m alice admin
+      register: member
+      changed_when: false
+      failed_when: false
+
+    - name: Read authorized_keys
+      ansible.builtin.command: cat /Users/alice/.ssh/authorized_keys
+      register: keys
+      changed_when: false
+
+    - name: Look up authorized_keys owner and mode
+      ansible.builtin.command: stat -f '%Su %Lp' /Users/alice/.ssh/authorized_keys
+      register: keys_stat
+      changed_when: false
+
+    - name: Assert account state
+      ansible.builtin.assert:
+        that:
+          - hidden.stdout.split()[-1] == '1'
+          - member.stdout is match('^no ')
+          - keys.stdout == 'ssh-ed25519 AAAATEST alice@test'
+          - keys_stat.stdout == 'alice 600'
+        quiet: true
