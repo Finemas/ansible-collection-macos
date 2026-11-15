@@ -1,0 +1,20 @@
+---
+- name: Verify homebrew fresh
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Stat brew
+      ansible.builtin.stat:
+        path: /opt/homebrew/bin/brew
+      register: brew
+
+    - name: List formulae
+      ansible.builtin.command: /opt/homebrew/bin/brew list --formula
+      register: formulae
+      changed_when: false
+
+    - name: Assert brew and hello installed
+      ansible.builtin.assert:
+        that:
+          - brew.stat.exists
+          - "'hello' in formulae.stdout_lines"

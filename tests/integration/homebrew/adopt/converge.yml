@@ -1,0 +1,40 @@
+---
+- name: Converge homebrew adopt
+  hosts: all
+  gather_facts: false
+  vars:
+    brew: /opt/homebrew/bin/brew
+    app: /Applications/Rectangle.app
+  tasks:
+    - name: Check whether rectangle is already brew-managed
+      ansible.builtin.command: "{{ brew }} list --cask rectangle"
+      register: managed
+      changed_when: false
+      failed_when: false
+
+    - name: Create unmanaged Rectangle.app fixture
+      when: managed.rc != 0
+      block:
+        - name: Install cask
+          ansible.builtin.command: "{{ brew }} install --cask rectangle"
+          changed_when: false
+
+        - name: Move app aside
+          ansible.builtin.command: mv {{ app }} {{ app }}.aside
+          changed_when: false
+
+        - name: Uninstall cask
+          ansible.builtin.command: "{{ brew }} uninstall --cask rectangle"
+          changed_when: false
+
+        - name: Move app back
+          ansible.builtin.command: mv {{ app }}.aside {{ app }}
+          changed_when: false
+
+- name: Converge homebrew role
+  hosts: all
+  gather_facts: false
+  roles:
+    - role: finemas.macos.homebrew
+      vars:
+        homebrew_casks: [rectangle]

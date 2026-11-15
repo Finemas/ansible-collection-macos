@@ -1,0 +1,29 @@
+---
+- name: Verify homebrew default
+  hosts: all
+  gather_facts: false
+  vars:
+    brew: /opt/homebrew/bin/brew
+  tasks:
+    - name: List formulae
+      ansible.builtin.command: "{{ brew }} list --formula"
+      register: formulae
+      changed_when: false
+
+    - name: List casks
+      ansible.builtin.command: "{{ brew }} list --cask"
+      register: casks
+      changed_when: false
+
+    - name: Look up mas
+      ansible.builtin.shell: PATH=/opt/homebrew/bin:$PATH command -v mas
+      register: mas
+      changed_when: false
+      failed_when: false
+
+    - name: Assert expected packages and no mas
+      ansible.builtin.assert:
+        that:
+          - "'hello' in formulae.stdout_lines"
+          - "'rectangle' in casks.stdout_lines"
+          - mas.rc != 0

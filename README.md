@@ -24,7 +24,7 @@ ansible-galaxy collection install -r requirements.yml
 
 | Role | Purpose | Status |
 |------|---------|--------|
-| `homebrew` | Install Homebrew, taps, formulae, casks and Mac App Store apps | planned |
+| `homebrew` | Install Homebrew, taps, formulae, casks and Mac App Store apps | ready |
 | `defaults` | Apply macOS `defaults` settings | planned |
 | `dotfiles` | Link dotfiles into the home directory | planned |
 | `pull` | Run `ansible-pull` periodically via launchd | planned |

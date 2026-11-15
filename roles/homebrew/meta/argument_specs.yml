@@ -1,0 +1,47 @@
+---
+argument_specs:
+  main:
+    short_description: Install Homebrew and manage taps, formulae, casks and Mac App Store apps
+    options:
+      homebrew_prefix:
+        type: str
+        default: /opt/homebrew
+        description: Homebrew prefix. Apple Silicon only.
+      homebrew_taps:
+        type: list
+        elements: str
+        default: []
+        description: Taps to add.
+      homebrew_formulae:
+        type: list
+        elements: str
+        default: []
+        description: Formulae to install.
+      homebrew_casks:
+        type: list
+        elements: str
+        default: []
+        description: Casks to install.
+      homebrew_cask_install_options:
+        type: list
+        elements: str
+        default: [adopt]
+        description: Options passed to cask installs, without the leading dashes. C(adopt) takes over existing apps.
+      homebrew_mas_apps:
+        type: list
+        elements: dict
+        default: []
+        description: Mac App Store apps. Needs a signed-in App Store; installs C(mas) when non-empty.
+        options:
+          id:
+            type: int
+            required: true
+            description: App Store id.
+          name:
+            type: str
+            required: true
+            description: Human-readable name, used as the task label.
+      homebrew_upgrade_all:
+        type: bool
+        default: false
+        description: Upgrade all formulae and casks.

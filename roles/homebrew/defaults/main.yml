@@ -1,0 +1,8 @@
+---
+homebrew_prefix: /opt/homebrew
+homebrew_taps: []
+homebrew_formulae: []
+homebrew_casks: []
+homebrew_cask_install_options: [adopt]
+homebrew_mas_apps: []
+homebrew_upgrade_all: false
