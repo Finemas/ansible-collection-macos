@@ -7,6 +7,10 @@ argument_specs:
         type: str
         default: /opt/homebrew
         description: Homebrew prefix. Apple Silicon only.
+      homebrew_user:
+        type: str
+        default: "{{ ansible_user_id }}"
+        description: Non-root user that owns the prefix and runs every brew command. Must not be C(root).
       homebrew_taps:
         type: list
         elements: str

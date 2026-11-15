@@ -27,3 +27,24 @@
           - "'hello' in formulae.stdout_lines"
           - "'rectangle' in casks.stdout_lines"
           - mas.rc != 0
+
+- name: Verify homebrew refuses root
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Run role as root
+      block:
+        - name: Include role
+          ansible.builtin.include_role:
+            name: finemas.macos.homebrew
+          vars:
+            homebrew_user: root
+
+        - name: Fail if root was accepted
+          ansible.builtin.fail:
+            msg: Role accepted homebrew_user root
+      rescue:
+        - name: Assert root refusal message
+          ansible.builtin.assert:
+            that: "'Homebrew cannot run as root; set homebrew_user' in ansible_failed_result.msg"
+            quiet: true
