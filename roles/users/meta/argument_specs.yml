@@ -56,7 +56,7 @@ argument_specs:
       users_guard_accounts:
         type: list
         elements: str
-        default: ["{{ ansible_facts['user_id'] | default('') }}"]
+        default: []
         description: >-
-          Accounts that must keep admin and must not be deleted. The connection user (C(ansible_user), else the effective user)
-          is always guarded; in pull mode that is root, so name the real admin here.
+          Extra accounts that must keep admin and must not be deleted. The connection user is always guarded:
+          C(ansible_user), else C(SUDO_USER), else the effective user (root in pull mode, so name the real admin here).

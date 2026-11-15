@@ -18,6 +18,6 @@
     - name: Assert drift refusal and no changes
       ansible.builtin.assert:
         that:
-          - msg.stdout == 'Unknown accounts (add to users_accounts, users_ignore or users_absent): stray'
+          - "msg.stdout == 'Unknown accounts (add to users_accounts, users_ignore or users_absent): stray'"
           - carol.rc != 0
         quiet: true
