@@ -34,6 +34,12 @@
     fail_msg: Only Apple Silicon is supported
     quiet: true
 
+- name: Require a homebrew_user
+  ansible.builtin.assert:
+    that: homebrew_user | length > 0
+    fail_msg: homebrew_user is empty; facts not gathered?
+    quiet: true
+
 - name: Refuse to run brew as root
   ansible.builtin.assert:
     that: homebrew_user != 'root'
