@@ -5,7 +5,7 @@
 
 - name: Derive guard inputs
   ansible.builtin.set_fact:
-    users_connection_user: "{{ ansible_user | default(ansible_facts['user_id']) }}"
+    users_connection_user: "{{ ansible_user | default(ansible_facts['env']['SUDO_USER'] | default(ansible_facts['user_id'])) }}"
     users_nonadmin_names: >-
       {{ (users_accounts | rejectattr('admin', 'defined') | map(attribute='name') | list)
       + (users_accounts | selectattr('admin', 'defined') | rejectattr('admin') | map(attribute='name') | list) }}
@@ -39,6 +39,7 @@
     executable: /bin/bash
   register: users_human
   changed_when: false
+  check_mode: false
 
 - name: Refuse unknown accounts
   ansible.builtin.fail:
@@ -54,6 +55,7 @@
   register: users_autologin_current
   changed_when: false
   failed_when: false
+  check_mode: false
   when: users_autologin | length > 0
 
 - name: Assert auto-login user
@@ -71,10 +73,18 @@
   register: users_lookup
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Collect missing accounts
   ansible.builtin.set_fact:
     users_missing: "{{ users_lookup.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}"
+
+# In check mode missing accounts are not created, so the steps below must skip them.
+- name: Collect accounts that exist
+  ansible.builtin.set_fact:
+    users_live: >-
+      {{ (users_accounts | rejectattr('name', 'in', users_missing | map(attribute='name') | list) | list)
+      if ansible_check_mode else users_accounts }}
 
 - name: Require a password for missing accounts
   ansible.builtin.fail:
@@ -94,12 +104,13 @@
 
 - name: Check admin membership
   ansible.builtin.command: dseditgroup -o checkmember -m {{ item.name }} admin
-  loop: "{{ users_accounts }}"
+  loop: "{{ users_live }}"
   loop_control:
     label: "{{ item.name }}"
   register: users_membership
   changed_when: false
   failed_when: users_membership.stdout is not match('^(yes|no) ')
+  check_mode: false
 
 - name: Reconcile admin membership
   ansible.builtin.command: dseditgroup -o edit {{ '-a' if item.item.admin | default(false) | bool else '-d' }} {{ item.item.name }} -t user admin
@@ -111,12 +122,13 @@
 
 - name: Read hidden flags
   ansible.builtin.command: dscl . -read /Users/{{ item.name }} IsHidden
-  loop: "{{ users_accounts }}"
+  loop: "{{ users_live }}"
   loop_control:
     label: "{{ item.name }}"
   register: users_hidden
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Reconcile hidden flags
   ansible.builtin.command: dscl . -create /Users/{{ item.item.name }} IsHidden {{ '1' if item.item.hidden | default(false) | bool else '0' }}
@@ -126,27 +138,37 @@
   changed_when: true
   when: (item.rc == 0 and item.stdout.split()[-1] == '1') != (item.item.hidden | default(false) | bool)
 
-- name: Create .ssh directories
-  ansible.builtin.file:
-    path: "/Users/{{ item.name }}/.ssh"
-    state: directory
-    owner: "{{ item.name }}"
-    group: staff
-    mode: "0700"
-  loop: "{{ users_accounts | selectattr('ssh_authorized_keys', 'defined') | list }}"
+- name: Look up home directories
+  ansible.builtin.command: dscl . -read /Users/{{ item.name }} NFSHomeDirectory
+  loop: "{{ users_live | selectattr('ssh_authorized_keys', 'defined') | list }}"
   loop_control:
     label: "{{ item.name }}"
+  register: users_homes
+  changed_when: false
+  check_mode: false
+
+# Run as the account itself: a symlink planted in its home then grants nothing beyond its own rights.
+- name: Create .ssh directories
+  ansible.builtin.file:
+    path: "{{ item.stdout.split(':', 1)[1] | trim }}/.ssh"
+    state: directory
+    mode: "0700"
+  become: true
+  become_user: "{{ item.item.name }}"
+  loop: "{{ users_homes.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
 
 - name: Write authorized_keys
   ansible.builtin.copy:
-    content: "{{ item.ssh_authorized_keys | join('\n') }}{{ '\n' if item.ssh_authorized_keys | length > 0 else '' }}"
-    dest: "/Users/{{ item.name }}/.ssh/authorized_keys"
-    owner: "{{ item.name }}"
-    group: staff
+    content: "{{ item.item.ssh_authorized_keys | join('\n') }}{{ '\n' if item.item.ssh_authorized_keys | length > 0 else '' }}"
+    dest: "{{ item.stdout.split(':', 1)[1] | trim }}/.ssh/authorized_keys"
     mode: "0600"
-  loop: "{{ users_accounts | selectattr('ssh_authorized_keys', 'defined') | list }}"
+  become: true
+  become_user: "{{ item.item.name }}"
+  loop: "{{ users_homes.results }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.item.name }}"
 
 - name: Look up accounts to delete
   ansible.builtin.command: dscl . -read /Users/{{ item }} UniqueID
@@ -154,6 +176,7 @@
   register: users_doomed
   changed_when: false
   failed_when: false
+  check_mode: false
 
 - name: Delete accounts
   ansible.builtin.command:
@@ -163,3 +186,19 @@
     label: "{{ item.item }}"
   changed_when: true
   when: item.rc == 0
+
+# sysadminctl exits 0 on many failures.
+- name: Confirm deletion
+  ansible.builtin.command: dscl . -read /Users/{{ item.item }} UniqueID
+  loop: "{{ users_doomed.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: users_after
+  changed_when: false
+  failed_when: false
+  when: item.rc == 0 and not ansible_check_mode
+
+- name: Fail when an account survived deletion
+  ansible.builtin.fail:
+    msg: "Failed to delete account {{ users_after.results | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | map(attribute='item.item') | first }}"
+  when: users_after.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length > 0
