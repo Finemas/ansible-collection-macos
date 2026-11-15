@@ -1,0 +1,10 @@
+---
+- name: Converge homebrew owner
+  hosts: all
+  gather_facts: false
+  become: true
+  roles:
+    - role: finemas.macos.homebrew
+      vars:
+        homebrew_user: "{{ lookup('env', 'USER') }}"
+        homebrew_formulae: [hello]

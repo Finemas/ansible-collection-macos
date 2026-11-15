@@ -1,0 +1,25 @@
+---
+- name: Verify homebrew owner
+  hosts: all
+  gather_facts: false
+  vars:
+    brew_user: "{{ lookup('env', 'USER') }}"
+    prefix: /opt/homebrew
+  tasks:
+    - name: List formulae as the brew user
+      ansible.builtin.command: "{{ prefix }}/bin/brew list --formula"
+      become: true
+      become_user: "{{ brew_user }}"
+      register: formulae
+      changed_when: false
+
+    - name: Look up Cellar owner
+      ansible.builtin.command: stat -f %Su {{ prefix }}/Cellar/hello
+      register: owner
+      changed_when: false
+
+    - name: Assert hello is installed and owned by the brew user
+      ansible.builtin.assert:
+        that:
+          - "'hello' in formulae.stdout_lines"
+          - owner.stdout == brew_user
