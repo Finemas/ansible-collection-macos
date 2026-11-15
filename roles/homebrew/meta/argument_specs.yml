@@ -9,8 +9,8 @@ argument_specs:
         description: Homebrew prefix. Apple Silicon only.
       homebrew_user:
         type: str
-        default: "{{ ansible_user_id }}"
-        description: Non-root user that owns the prefix and runs every brew command. Must not be C(root).
+        default: "{{ ansible_facts['user_id'] | default('') }}"
+        description: Non-root user that owns the prefix and runs brew. Defaults to the effective user after facts. Not C(root) or empty.
       homebrew_taps:
         type: list
         elements: str

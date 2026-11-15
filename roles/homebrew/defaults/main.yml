@@ -1,6 +1,6 @@
 ---
 homebrew_prefix: /opt/homebrew
-homebrew_user: "{{ ansible_user_id }}"
+homebrew_user: "{{ ansible_facts['user_id'] | default('') }}"
 homebrew_taps: []
 homebrew_formulae: []
 homebrew_casks: []
