@@ -48,6 +48,14 @@
       changed_when: false
       when: not users_bob_home.stat.exists
 
+    # Run before carl and dave exist: the drift check would reject them as undeclared.
+    - name: Delete bob and keep the home
+      ansible.builtin.include_role:
+        name: finemas.macos.users
+      vars:
+        users_absent: [bob]
+        users_ignore: "{{ users_recorded.stdout_lines }}"
+
     # carl's home is removed, so a marker records that the fixtures already ran.
     - name: Look up fixture marker
       ansible.builtin.stat:
@@ -88,13 +96,6 @@
         dest: /var/tmp/finemas-users-absent-carl
         force: false
         mode: "0644"
-
-    - name: Delete bob and keep the home
-      ansible.builtin.include_role:
-        name: finemas.macos.users
-      vars:
-        users_absent: [bob]
-        users_ignore: "{{ users_recorded.stdout_lines }}"
 
     - name: Delete carl and dave, removing homes only where safe
       ansible.builtin.include_role:

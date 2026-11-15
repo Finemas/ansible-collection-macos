@@ -33,8 +33,8 @@ argument_specs:
         default: []
         description: >-
           Accounts to delete (record removed with C(dscl), group memberships cleared). Not the connection user or a guarded account.
-          An account holding a SecureToken is refused untouched with C(Refusing to delete <name>: it holds a SecureToken
-          (remove it with sysadminctl -secureTokenOff first)).
+          An account holding a SecureToken is refused untouched with the message "Refusing to delete <name>: it holds a SecureToken
+          (remove it with sysadminctl -secureTokenOff first)".
       users_ignore:
         type: list
         elements: str
@@ -47,7 +47,9 @@ argument_specs:
       users_absent_keep_home:
         type: bool
         default: true
-        description: Keep the home directory of deleted accounts. When false, the home is removed only if it lies under C(/Users).
+        description: >-
+          Keep the home directory of deleted accounts. When false, the home is removed only if it is exactly C(/Users/<name>),
+          a real directory (not a symlink) owned by the account; anything else is kept with a warning.
       users_initial_password:
         type: str
         no_log: true

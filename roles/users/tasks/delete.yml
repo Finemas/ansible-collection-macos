@@ -18,11 +18,17 @@
   failed_when: false
   check_mode: false
 
+# An unreadable crypto user list must not pass as "no token holders".
+- name: Refuse when the SecureToken check is impossible
+  ansible.builtin.fail:
+    msg: "Refusing to delete {{ users_name }}: cannot list APFS cryptographic users (diskutil exit code {{ users_crypto.rc }})"
+  when: users_crypto.rc != 0
+
 - name: Set deletion facts
   ansible.builtin.set_fact:
     users_uid: "{{ users_record.stdout | regex_findall('(?m)^UniqueID: (\\S+)') | first | default('') }}"
     users_guid: "{{ users_record.stdout | regex_findall('(?m)^GeneratedUID: (\\S+)') | first | default('') }}"
-    users_home_path: "{{ users_record.stdout | regex_findall('(?m)^NFSHomeDirectory: (.*)$') | first | default('') }}"
+    users_home_path: "{{ users_record.stdout | regex_findall('(?m)^NFSHomeDirectory:[ \\t]*(?:\\n[ \\t]*)?(.*)$') | first | default('') }}"
     users_group_names: >-
       {{ users_groups.stdout_lines | select('match', '^[^\s)]') | map('ansible.builtin.split', '\t') | map('first') | list }}
 
@@ -53,7 +59,9 @@
 - name: Warn about a kept home directory
   ansible.builtin.debug:
     msg: "WARNING: keeping home of {{ users_name }} at '{{ users_home_path }}': not a real directory at /Users/{{ users_name }} owned by the account"
-  when: not users_absent_keep_home and not users_home_removable and users_home_path | length > 0
+  when: >-
+    not users_absent_keep_home and not users_home_removable and users_home_path | length > 0
+    and (users_home_path != '/Users/' ~ users_name or users_home_stat.stat.exists)
 
 # dscl -delete leaves group memberships behind; a later account with the same name would inherit them.
 - name: Remove the account from its groups
