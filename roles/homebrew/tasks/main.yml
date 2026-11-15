@@ -1,4 +1,29 @@
 ---
+# Without Command Line Tools /usr/bin/python3 is an installer stub, so this must stay Python-free (raw) until CLT exists.
+- name: Check Command Line Tools
+  ansible.builtin.raw: /usr/bin/xcode-select -p
+  register: homebrew_clt
+  changed_when: false
+  failed_when: false
+
+- name: Install Command Line Tools
+  ansible.builtin.raw: |
+    /bin/bash <<'EOS'
+    set -eu -o pipefail
+    marker=/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    trap 'rm -f "$marker"' EXIT
+    touch "$marker"
+    label="$(/usr/sbin/softwareupdate -l 2>&1 | sed -n 's/^ *\* Label: \(Command Line Tools.*\)$/\1/p' | tail -n 1)"
+    if [ -z "$label" ]; then
+      echo "No Command Line Tools label offered by softwareupdate" >&2
+      exit 1
+    fi
+    /usr/sbin/softwareupdate -i "$label"
+    EOS
+  become: true
+  changed_when: true
+  when: homebrew_clt.rc != 0
+
 - name: Gather minimal facts
   ansible.builtin.setup:
     gather_subset: [min]
