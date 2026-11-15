@@ -37,3 +37,19 @@
           - keys.stdout == 'ssh-ed25519 AAAATEST alice@test'
           - keys_stat.stdout == 'alice 600'
         quiet: true
+
+    # R11: on a converged host --check --diff must neither fail nor report changes.
+    - name: Run the converge playbook in check mode
+      ansible.builtin.command:
+        argv: [ansible-playbook, --check, --diff, -i, "{{ inventory_file }}", "{{ playbook_dir }}/converge.yml"]
+      become: false
+      delegate_to: localhost
+      environment:
+        ANSIBLE_NOCOLOR: "1"
+      register: check_run
+      changed_when: false
+
+    - name: Assert check mode is clean
+      ansible.builtin.assert:
+        that: check_run.stdout is search('changed=0 +unreachable=0 +failed=0')
+        quiet: true

@@ -14,7 +14,7 @@
       ansible.builtin.command: cat /var/tmp/finemas-users-guard-{{ item }}
       register: stored
       changed_when: false
-      loop: [accounts.msg, absent.msg, before.txt]
+      loop: [accounts.msg, absent.msg, before.txt, guarded-accounts.msg, guarded-absent.msg]
 
     - name: Check connection user admin membership
       ansible.builtin.command: dseditgroup -o checkmember -m {{ conn.stdout }} admin
@@ -28,4 +28,6 @@
           - stored.results[0].stdout == 'Refusing to remove admin from the connection user'
           - stored.results[1].stdout == 'Refusing to delete the connection user'
           - stored.results[2].stdout == after.stdout
+          - stored.results[3].stdout == 'Refusing to remove admin from guarded account guardian'
+          - stored.results[4].stdout == 'Refusing to delete guarded account guardian'
         quiet: true

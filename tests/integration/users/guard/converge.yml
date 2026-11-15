@@ -38,7 +38,6 @@
           ansible.builtin.include_role:
             name: finemas.macos.users
           vars:
-            ansible_user: "{{ users_conn.stdout }}"
             users_accounts:
               - name: "{{ users_conn.stdout }}"
                 admin: false
@@ -60,7 +59,6 @@
           ansible.builtin.include_role:
             name: finemas.macos.users
           vars:
-            ansible_user: "{{ users_conn.stdout }}"
             users_absent: ["{{ users_conn.stdout }}"]
             users_ignore: "{{ users_recorded.stdout_lines }}"
 
@@ -72,4 +70,46 @@
           ansible.builtin.copy:
             content: "{{ ansible_failed_result.msg }}"
             dest: /var/tmp/finemas-users-guard-absent.msg
+            mode: "0644"
+
+    - name: Try to demote a guarded account
+      block:
+        - name: Apply role
+          ansible.builtin.include_role:
+            name: finemas.macos.users
+          vars:
+            users_guard_accounts: [guardian]
+            users_accounts:
+              - name: guardian
+                admin: false
+            users_ignore: "{{ users_recorded.stdout_lines }}"
+
+        - name: Fail if demotion was accepted
+          ansible.builtin.fail:
+            msg: Role accepted removing admin from a guarded account
+      rescue:
+        - name: Store guarded demotion failure message
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result.msg }}"
+            dest: /var/tmp/finemas-users-guard-guarded-accounts.msg
+            mode: "0644"
+
+    - name: Try to delete a guarded account
+      block:
+        - name: Apply role
+          ansible.builtin.include_role:
+            name: finemas.macos.users
+          vars:
+            users_guard_accounts: [guardian]
+            users_absent: [guardian]
+            users_ignore: "{{ users_recorded.stdout_lines }}"
+
+        - name: Fail if deletion was accepted
+          ansible.builtin.fail:
+            msg: Role accepted deleting a guarded account
+      rescue:
+        - name: Store guarded deletion failure message
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result.msg }}"
+            dest: /var/tmp/finemas-users-guard-guarded-absent.msg
             mode: "0644"
