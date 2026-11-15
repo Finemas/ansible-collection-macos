@@ -41,6 +41,8 @@
   community.general.mas:
     id: "{{ item.id }}"
     state: present
+  environment:
+    PATH: "{{ homebrew_prefix }}/bin:{{ ansible_facts['env']['PATH'] }}"
   loop: "{{ homebrew_mas_apps }}"
   loop_control:
     label: "{{ item.name }}"
