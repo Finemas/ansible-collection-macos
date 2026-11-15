@@ -1,0 +1,99 @@
+---
+- name: Read the account record to delete
+  ansible.builtin.command: dscl . -read /Users/{{ users_name }} UniqueID GeneratedUID NFSHomeDirectory
+  register: users_record
+  changed_when: false
+  check_mode: false
+
+- name: List groups of the account to delete
+  ansible.builtin.command: dscl . -search /Groups GroupMembership {{ users_name }}
+  register: users_groups
+  changed_when: false
+  check_mode: false
+
+- name: List APFS cryptographic users
+  ansible.builtin.command: diskutil apfs listCryptoUsers /
+  register: users_crypto
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# An unreadable crypto user list must not pass as "no token holders".
+- name: Refuse when the SecureToken check is impossible
+  ansible.builtin.fail:
+    msg: "Refusing to delete {{ users_name }}: cannot list APFS cryptographic users (diskutil exit code {{ users_crypto.rc }})"
+  when: users_crypto.rc != 0
+
+- name: Set deletion facts
+  ansible.builtin.set_fact:
+    users_uid: "{{ users_record.stdout | regex_findall('(?m)^UniqueID: (\\S+)') | first | default('') }}"
+    users_guid: "{{ users_record.stdout | regex_findall('(?m)^GeneratedUID: (\\S+)') | first | default('') }}"
+    users_home_path: "{{ users_record.stdout | regex_findall('(?m)^NFSHomeDirectory:[ \\t]*(?:\\n[ \\t]*)?(.*)$') | first | default('') }}"
+    users_group_names: >-
+      {{ users_groups.stdout_lines | select('match', '^[^\s)]') | map('ansible.builtin.split', '\t') | map('first') | list }}
+
+# dscl -delete would leave the crypto user behind, so such accounts are refused untouched.
+- name: Refuse accounts holding a SecureToken
+  ansible.builtin.fail:
+    msg: "Refusing to delete {{ users_name }}: it holds a SecureToken (remove it with sysadminctl -secureTokenOff first)"
+  when: users_guid | length > 0 and (users_guid | upper) in (users_crypto.stdout | upper)
+
+# Only the account's own, real directory is removed; anything else is kept.
+- name: Stat the home directory
+  ansible.builtin.stat:
+    path: "{{ users_home_path }}"
+    follow: false
+  register: users_home_stat
+  check_mode: false
+  when: users_home_path == '/Users/' ~ users_name
+
+- name: Decide whether the home may be removed
+  ansible.builtin.set_fact:
+    users_home_removable: >-
+      {{ (users_home_path == '/Users/' ~ users_name
+      and users_home_stat.stat.exists
+      and users_home_stat.stat.isdir
+      and not users_home_stat.stat.islnk
+      and users_home_stat.stat.uid | string == users_uid) | bool }}
+
+- name: Warn about a kept home directory
+  ansible.builtin.debug:
+    msg: "WARNING: keeping home of {{ users_name }} at '{{ users_home_path }}': not a real directory at /Users/{{ users_name }} owned by the account"
+  when: >-
+    not users_absent_keep_home and not users_home_removable and users_home_path | length > 0
+    and (users_home_path != '/Users/' ~ users_name or users_home_stat.stat.exists)
+
+# dscl -delete leaves group memberships behind; a later account with the same name would inherit them.
+- name: Remove the account from its groups
+  ansible.builtin.command: dseditgroup -o edit -d {{ users_name }} -t user {{ item }}
+  loop: "{{ users_group_names }}"
+  changed_when: true
+
+# Before the record, so a failed removal leaves the record and the next run retries.
+- name: Remove the home directory
+  ansible.builtin.file:
+    path: "/Users/{{ users_name }}"
+    state: absent
+  when: not users_absent_keep_home and users_home_removable
+
+- name: Delete the account record
+  ansible.builtin.command: dscl . -delete /Users/{{ users_name }}
+  changed_when: true
+
+- name: Report pending deletion (check mode)
+  ansible.builtin.command: /usr/bin/true
+  check_mode: false
+  changed_when: true
+  when: ansible_check_mode
+
+- name: Confirm deletion
+  ansible.builtin.command: dscl . -read /Users/{{ users_name }} UniqueID
+  register: users_after
+  changed_when: false
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Fail when the account survived deletion
+  ansible.builtin.fail:
+    msg: "Failed to delete account {{ users_name }}"
+  when: not ansible_check_mode and users_after.rc == 0
