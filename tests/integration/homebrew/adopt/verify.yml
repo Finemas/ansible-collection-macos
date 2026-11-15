@@ -1,0 +1,13 @@
+---
+- name: Verify homebrew adopt
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: List casks
+      ansible.builtin.command: /opt/homebrew/bin/brew list --cask
+      register: casks
+      changed_when: false
+
+    - name: Assert rectangle is brew-managed
+      ansible.builtin.assert:
+        that: "'rectangle' in casks.stdout_lines"

@@ -1,0 +1,59 @@
+---
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+
+- name: Require Apple Silicon
+  ansible.builtin.assert:
+    that: ansible_facts['architecture'] == 'arm64'
+    fail_msg: Only Apple Silicon is supported
+    quiet: true
+
+- name: Check for brew
+  ansible.builtin.stat:
+    path: "{{ homebrew_prefix }}/bin/brew"
+  register: homebrew_brew
+
+- name: Install Homebrew
+  ansible.builtin.include_tasks: install.yml
+  when: not homebrew_brew.stat.exists
+
+- name: Add taps
+  community.general.homebrew_tap:
+    name: "{{ homebrew_taps }}"
+    path: "{{ homebrew_prefix }}/bin"
+  when: homebrew_taps | length > 0
+
+- name: Install formulae
+  community.general.homebrew:
+    name: "{{ homebrew_formulae + (['mas'] if homebrew_mas_apps | length > 0 else []) }}"
+    path: "{{ homebrew_prefix }}/bin"
+  when: (homebrew_formulae | length > 0) or (homebrew_mas_apps | length > 0)
+
+- name: Install casks
+  community.general.homebrew_cask:
+    name: "{{ homebrew_casks }}"
+    install_options: "{{ homebrew_cask_install_options }}"
+    path: "{{ homebrew_prefix }}/bin"
+  when: homebrew_casks | length > 0
+
+- name: Install Mac App Store apps
+  community.general.mas:
+    id: "{{ item.id }}"
+    state: present
+  loop: "{{ homebrew_mas_apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Upgrade formulae
+  community.general.homebrew:
+    update_homebrew: true
+    upgrade_all: true
+    path: "{{ homebrew_prefix }}/bin"
+  when: homebrew_upgrade_all
+
+- name: Upgrade casks
+  community.general.homebrew_cask:
+    upgrade_all: true
+    path: "{{ homebrew_prefix }}/bin"
+  when: homebrew_upgrade_all

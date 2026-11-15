@@ -1,0 +1,34 @@
+---
+# The installer refuses to run as root but needs passwordless sudo in
+# NONINTERACTIVE mode, so grant it temporarily and run the script as the user.
+- name: Install Homebrew with temporary passwordless sudo
+  block:
+    - name: Grant temporary passwordless sudo
+      ansible.builtin.copy:
+        content: "{{ ansible_facts['user_id'] }} ALL=(ALL) NOPASSWD: ALL\n"
+        dest: /etc/sudoers.d/ansible-homebrew
+        owner: root
+        group: wheel
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+      become: true
+
+    - name: Download installer
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+        dest: "{{ ansible_facts['env']['TMPDIR'] | default('/tmp', true) }}/homebrew-install.sh"
+        mode: "0755"
+      register: homebrew_installer
+
+    - name: Run installer
+      ansible.builtin.command: /bin/bash {{ homebrew_installer.dest }}
+      environment:
+        NONINTERACTIVE: "1"
+      args:
+        creates: "{{ homebrew_prefix }}/bin/brew"
+  always:
+    - name: Revoke temporary passwordless sudo
+      ansible.builtin.file:
+        path: /etc/sudoers.d/ansible-homebrew
+        state: absent
+      become: true

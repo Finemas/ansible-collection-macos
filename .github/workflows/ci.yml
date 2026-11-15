@@ -51,6 +51,7 @@ jobs:
         run: |
           matrix="$(find tests/integration -mindepth 2 -maxdepth 2 -type d \
             -not -path 'tests/integration/_*' \
+            -exec sh -c 'test ! -e "$1/vm-only"' _ {} \; -print \
             | sed 's|tests/integration/||' \
             | jq -R 'split("/") | {role: .[0], scenario: .[1]}' \
             | jq -sc '{include: .}')"

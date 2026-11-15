@@ -1,0 +1,8 @@
+---
+- name: Converge homebrew fresh
+  hosts: all
+  gather_facts: false
+  roles:
+    - role: finemas.macos.homebrew
+      vars:
+        homebrew_formulae: [hello]
