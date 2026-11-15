@@ -31,7 +31,18 @@
         path: /Users/carl
       register: carl_home
 
-    - name: Assert bob is gone with no memberships, home kept, and carl is fully gone
+    - name: Look up dave
+      ansible.builtin.command: dscl . -read /Users/dave UniqueID
+      register: dave
+      changed_when: false
+      failed_when: false
+
+    - name: Look up dave decoy home
+      ansible.builtin.stat:
+        path: /Users/Shared/decoy-dave
+      register: dave_home
+
+    - name: Assert bob is gone from every group with home kept, carl is fully gone and dave's decoy home survived
       ansible.builtin.assert:
         that:
           - bob.rc != 0
@@ -39,10 +50,16 @@
           - bob_groups.stdout | trim == ''
           - carl.rc != 0
           - not carl_home.stat.exists
+          - dave.rc != 0
+          - dave_home.stat.exists
         quiet: true
 
     - name: Remove leftovers so the scenario can run again
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
-      loop: [/Users/bob, /var/tmp/finemas-users-absent-carl]
+      loop: [/Users/bob, /Users/dave, /Users/Shared/decoy-dave, /var/tmp/finemas-users-absent-carl]
+
+    - name: Remove fixture group
+      ansible.builtin.command: dscl . -delete /Groups/finemastest
+      changed_when: true

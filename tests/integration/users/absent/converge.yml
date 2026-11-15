@@ -32,11 +32,27 @@
       changed_when: false
       when: not users_bob_home.stat.exists
 
-    # carl's home is removed, so a marker records that the fixture already ran.
-    - name: Look up carl marker
+    - name: Look up fixture group
+      ansible.builtin.command: dscl . -read /Groups/finemastest
+      register: users_group
+      changed_when: false
+      failed_when: false
+
+    - name: Create fixture group
+      ansible.builtin.command: dscl . -create /Groups/finemastest PrimaryGroupID 4242
+      changed_when: false
+      when: users_group.rc != 0
+
+    - name: Add bob to the fixture group by name only
+      ansible.builtin.command: dscl . -append /Groups/finemastest GroupMembership bob
+      changed_when: false
+      when: not users_bob_home.stat.exists
+
+    # carl's home is removed, so a marker records that the fixtures already ran.
+    - name: Look up fixture marker
       ansible.builtin.stat:
         path: /var/tmp/finemas-users-absent-carl
-      register: users_carl_marker
+      register: users_marker
 
     - name: Create fixture account carl
       ansible.builtin.user:
@@ -44,9 +60,29 @@
         password: Test-Pass-1
       no_log: true
       changed_when: false
-      when: not users_carl_marker.stat.exists
+      when: not users_marker.stat.exists
 
-    - name: Write carl marker
+    - name: Create fixture account dave with a decoy home
+      ansible.builtin.user:
+        name: dave
+        password: Test-Pass-1
+        home: /Users/Shared/decoy-dave
+      no_log: true
+      changed_when: false
+      when: not users_marker.stat.exists
+
+    - name: Look up carl home
+      ansible.builtin.stat:
+        path: /Users/carl
+      register: users_carl_home
+
+    - name: Assert carl home exists before deletion
+      ansible.builtin.assert:
+        that: users_carl_home.stat.exists
+        quiet: true
+      when: not users_marker.stat.exists
+
+    - name: Write fixture marker
       ansible.builtin.copy:
         content: ""
         dest: /var/tmp/finemas-users-absent-carl
@@ -60,10 +96,10 @@
         users_absent: [bob]
         users_ignore: "{{ users_recorded.stdout_lines }}"
 
-    - name: Delete carl and remove the home
+    - name: Delete carl and dave, removing homes only where safe
       ansible.builtin.include_role:
         name: finemas.macos.users
       vars:
-        users_absent: [carl]
+        users_absent: [carl, dave]
         users_absent_keep_home: false
         users_ignore: "{{ users_recorded.stdout_lines }}"

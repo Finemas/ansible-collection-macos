@@ -31,7 +31,10 @@ argument_specs:
         type: list
         elements: str
         default: []
-        description: Accounts to delete (record removed with C(dscl), group memberships cleared). Not the connection user or a guarded account.
+        description: >-
+          Accounts to delete (record removed with C(dscl), group memberships cleared). Not the connection user or a guarded account.
+          An account holding a SecureToken is refused untouched with C(Refusing to delete <name>: it holds a SecureToken
+          (remove it with sysadminctl -secureTokenOff first)).
       users_ignore:
         type: list
         elements: str
