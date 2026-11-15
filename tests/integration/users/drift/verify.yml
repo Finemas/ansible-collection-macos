@@ -1,0 +1,23 @@
+---
+- name: Verify users drift
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Read stored failure message
+      ansible.builtin.command: cat /var/tmp/finemas-users-drift.msg
+      register: msg
+      changed_when: false
+
+    - name: Look up declared account carol
+      ansible.builtin.command: dscl . -read /Users/carol UniqueID
+      register: carol
+      changed_when: false
+      failed_when: false
+
+    - name: Assert drift refusal and no changes
+      ansible.builtin.assert:
+        that:
+          - msg.stdout == 'Unknown accounts (add to users_accounts, users_ignore or users_absent): stray'
+          - carol.rc != 0
+        quiet: true

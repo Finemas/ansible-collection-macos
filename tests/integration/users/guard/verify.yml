@@ -1,0 +1,31 @@
+---
+- name: Verify users guard
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Look up the connection user
+      ansible.builtin.command: id -un
+      become: false
+      register: conn
+      changed_when: false
+
+    - name: Read stored messages
+      ansible.builtin.command: cat /var/tmp/finemas-users-guard-{{ item }}
+      register: stored
+      changed_when: false
+      loop: [accounts.msg, absent.msg, before.txt]
+
+    - name: Check connection user admin membership
+      ansible.builtin.command: dseditgroup -o checkmember -m {{ conn.stdout }} admin
+      register: after
+      changed_when: false
+      failed_when: false
+
+    - name: Assert refusals and unchanged membership
+      ansible.builtin.assert:
+        that:
+          - stored.results[0].stdout == 'Refusing to remove admin from the connection user'
+          - stored.results[1].stdout == 'Refusing to delete the connection user'
+          - stored.results[2].stdout == after.stdout
+        quiet: true

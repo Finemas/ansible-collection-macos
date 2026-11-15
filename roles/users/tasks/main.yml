@@ -1,0 +1,165 @@
+---
+- name: Gather minimal facts
+  ansible.builtin.setup:
+    gather_subset: [min]
+
+- name: Derive guard inputs
+  ansible.builtin.set_fact:
+    users_connection_user: "{{ ansible_user | default(ansible_facts['user_id']) }}"
+    users_nonadmin_names: >-
+      {{ (users_accounts | rejectattr('admin', 'defined') | map(attribute='name') | list)
+      + (users_accounts | selectattr('admin', 'defined') | rejectattr('admin') | map(attribute='name') | list) }}
+    users_guarded: "{{ users_guard_accounts | reject('equalto', '') | list }}"
+
+- name: Refuse to remove admin from the connection user
+  ansible.builtin.fail:
+    msg: Refusing to remove admin from the connection user
+  when: users_connection_user in users_nonadmin_names
+
+- name: Refuse to remove admin from a guarded account
+  ansible.builtin.fail:
+    msg: "Refusing to remove admin from guarded account {{ users_nonadmin_names | intersect(users_guarded) | first }}"
+  when: users_nonadmin_names | intersect(users_guarded) | length > 0
+
+- name: Refuse to delete the connection user
+  ansible.builtin.fail:
+    msg: Refusing to delete the connection user
+  when: users_connection_user in users_absent
+
+- name: Refuse to delete a guarded account
+  ansible.builtin.fail:
+    msg: "Refusing to delete guarded account {{ users_absent | intersect(users_guarded) | first }}"
+  when: users_absent | intersect(users_guarded) | length > 0
+
+- name: List human accounts
+  ansible.builtin.shell: |
+    set -o pipefail
+    dscl . -list /Users UniqueID | awk '$2 >= {{ users_uid_min }} && $1 !~ /^_/ {print $1}'
+  args:
+    executable: /bin/bash
+  register: users_human
+  changed_when: false
+
+- name: Refuse unknown accounts
+  ansible.builtin.fail:
+    msg: >-
+      Unknown accounts (add to users_accounts, users_ignore or users_absent):
+      {{ unknown | join(', ') }}
+  vars:
+    unknown: "{{ users_human.stdout_lines | difference((users_accounts | map(attribute='name') | list) + users_ignore + users_absent) | sort }}"
+  when: unknown | length > 0
+
+- name: Read auto-login user
+  ansible.builtin.command: defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser
+  register: users_autologin_current
+  changed_when: false
+  failed_when: false
+  when: users_autologin | length > 0
+
+- name: Assert auto-login user
+  ansible.builtin.assert:
+    that: users_autologin_current.stdout == users_autologin
+    fail_msg: "Auto-login user is '{{ users_autologin_current.stdout }}', expected '{{ users_autologin }}'; the role does not set it"
+    quiet: true
+  when: users_autologin | length > 0
+
+- name: Look up declared accounts
+  ansible.builtin.command: dscl . -read /Users/{{ item.name }} UniqueID
+  loop: "{{ users_accounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: users_lookup
+  changed_when: false
+  failed_when: false
+
+- name: Collect missing accounts
+  ansible.builtin.set_fact:
+    users_missing: "{{ users_lookup.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}"
+
+- name: Require a password for missing accounts
+  ansible.builtin.fail:
+    msg: "Account {{ users_missing | map(attribute='name') | first }} is missing; run push with users_initial_password"
+  when: users_missing | length > 0 and users_initial_password is not defined
+
+- name: Create missing accounts
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    password: "{{ users_initial_password }}"
+    hidden: "{{ item.hidden | default(false) | bool }}"
+    shell: /bin/zsh
+  loop: "{{ users_missing }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Check admin membership
+  ansible.builtin.command: dseditgroup -o checkmember -m {{ item.name }} admin
+  loop: "{{ users_accounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: users_membership
+  changed_when: false
+  failed_when: users_membership.stdout is not match('^(yes|no) ')
+
+- name: Reconcile admin membership
+  ansible.builtin.command: dseditgroup -o edit {{ '-a' if item.item.admin | default(false) | bool else '-d' }} {{ item.item.name }} -t user admin
+  loop: "{{ users_membership.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  changed_when: true
+  when: (item.stdout is match('^yes ')) != (item.item.admin | default(false) | bool)
+
+- name: Read hidden flags
+  ansible.builtin.command: dscl . -read /Users/{{ item.name }} IsHidden
+  loop: "{{ users_accounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: users_hidden
+  changed_when: false
+  failed_when: false
+
+- name: Reconcile hidden flags
+  ansible.builtin.command: dscl . -create /Users/{{ item.item.name }} IsHidden {{ '1' if item.item.hidden | default(false) | bool else '0' }}
+  loop: "{{ users_hidden.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  changed_when: true
+  when: (item.rc == 0 and item.stdout.split()[-1] == '1') != (item.item.hidden | default(false) | bool)
+
+- name: Create .ssh directories
+  ansible.builtin.file:
+    path: "/Users/{{ item.name }}/.ssh"
+    state: directory
+    owner: "{{ item.name }}"
+    group: staff
+    mode: "0700"
+  loop: "{{ users_accounts | selectattr('ssh_authorized_keys', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Write authorized_keys
+  ansible.builtin.copy:
+    content: "{{ item.ssh_authorized_keys | join('\n') }}{{ '\n' if item.ssh_authorized_keys | length > 0 else '' }}"
+    dest: "/Users/{{ item.name }}/.ssh/authorized_keys"
+    owner: "{{ item.name }}"
+    group: staff
+    mode: "0600"
+  loop: "{{ users_accounts | selectattr('ssh_authorized_keys', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Look up accounts to delete
+  ansible.builtin.command: dscl . -read /Users/{{ item }} UniqueID
+  loop: "{{ users_absent }}"
+  register: users_doomed
+  changed_when: false
+  failed_when: false
+
+- name: Delete accounts
+  ansible.builtin.command:
+    argv: "{{ ['sysadminctl', '-deleteUser', item.item] + (['-keepHome'] if users_absent_keep_home else []) }}"
+  loop: "{{ users_doomed.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  changed_when: true
+  when: item.rc == 0

@@ -1,0 +1,49 @@
+---
+- name: Converge users drift
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Record existing human accounts
+      ansible.builtin.shell: |
+        set -o pipefail
+        dscl . -list /Users UniqueID | awk '$2 >= 500 && $1 !~ /^_/ {print $1}'
+      args:
+        executable: /bin/bash
+      register: users_recorded
+      changed_when: false
+
+    - name: Look up fixture account stray
+      ansible.builtin.command: dscl . -read /Users/stray UniqueID
+      register: users_stray
+      changed_when: false
+      failed_when: false
+
+    - name: Create fixture account stray
+      ansible.builtin.user:
+        name: stray
+        password: Test-Pass-1
+      no_log: true
+      changed_when: false
+      when: users_stray.rc != 0
+
+    - name: Run role with an undeclared account present
+      block:
+        - name: Apply role
+          ansible.builtin.include_role:
+            name: finemas.macos.users
+          vars:
+            users_initial_password: Test-Pass-1
+            users_accounts:
+              - name: carol
+            users_ignore: "{{ users_recorded.stdout_lines | difference(['stray']) }}"
+
+        - name: Fail if drift was accepted
+          ansible.builtin.fail:
+            msg: Role accepted an undeclared account
+      rescue:
+        - name: Store failure message
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result.msg }}"
+            dest: /var/tmp/finemas-users-drift.msg
+            mode: "0644"

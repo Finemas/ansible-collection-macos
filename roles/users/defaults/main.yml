@@ -1,0 +1,9 @@
+---
+users_accounts: []
+users_absent: []
+users_ignore: []
+users_uid_min: 500
+users_absent_keep_home: true
+users_autologin: ""
+users_guard_accounts:
+  - "{{ ansible_facts['user_id'] | default('') }}"

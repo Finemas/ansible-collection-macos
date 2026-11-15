@@ -1,0 +1,75 @@
+---
+- name: Converge users guard
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Record existing human accounts
+      ansible.builtin.shell: |
+        set -o pipefail
+        dscl . -list /Users UniqueID | awk '$2 >= 500 && $1 !~ /^_/ {print $1}'
+      args:
+        executable: /bin/bash
+      register: users_recorded
+      changed_when: false
+
+    # Without become this is the connection user; with become, facts would report root.
+    - name: Look up the connection user
+      ansible.builtin.command: id -un
+      become: false
+      register: users_conn
+      changed_when: false
+
+    - name: Record connection user admin membership
+      ansible.builtin.command: dseditgroup -o checkmember -m {{ users_conn.stdout }} admin
+      register: users_before
+      changed_when: false
+      failed_when: false
+
+    - name: Store membership before
+      ansible.builtin.copy:
+        content: "{{ users_before.stdout }}"
+        dest: /var/tmp/finemas-users-guard-before.txt
+        mode: "0644"
+
+    - name: Try to demote the connection user
+      block:
+        - name: Apply role
+          ansible.builtin.include_role:
+            name: finemas.macos.users
+          vars:
+            ansible_user: "{{ users_conn.stdout }}"
+            users_accounts:
+              - name: "{{ users_conn.stdout }}"
+                admin: false
+            users_ignore: "{{ users_recorded.stdout_lines }}"
+
+        - name: Fail if demotion was accepted
+          ansible.builtin.fail:
+            msg: Role accepted removing admin from the connection user
+      rescue:
+        - name: Store demotion failure message
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result.msg }}"
+            dest: /var/tmp/finemas-users-guard-accounts.msg
+            mode: "0644"
+
+    - name: Try to delete the connection user
+      block:
+        - name: Apply role
+          ansible.builtin.include_role:
+            name: finemas.macos.users
+          vars:
+            ansible_user: "{{ users_conn.stdout }}"
+            users_absent: ["{{ users_conn.stdout }}"]
+            users_ignore: "{{ users_recorded.stdout_lines }}"
+
+        - name: Fail if deletion was accepted
+          ansible.builtin.fail:
+            msg: Role accepted deleting the connection user
+      rescue:
+        - name: Store deletion failure message
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result.msg }}"
+            dest: /var/tmp/finemas-users-guard-absent.msg
+            mode: "0644"
