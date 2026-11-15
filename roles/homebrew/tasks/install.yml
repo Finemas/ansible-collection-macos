@@ -1,36 +1,53 @@
 ---
-# The installer refuses root and, in NONINTERACTIVE mode, only uses sudo via SUDO_ASKPASS.
-- name: Install Homebrew
+# Privileged prep via become (works with -K, which never reaches templating); brew itself is placed as the user.
+- name: Check Command Line Tools
+  ansible.builtin.command: /usr/bin/xcode-select -p
+  register: homebrew_clt
+  changed_when: false
+  failed_when: false
+
+- name: Install Command Line Tools
+  when: homebrew_clt.rc != 0
+  become: true
   block:
-    - name: Create private temp dir
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: homebrew-install.
-      register: homebrew_tmp
-
-    - name: Write askpass helper
-      ansible.builtin.copy:
-        content: "#!/bin/sh\nprintf '%s\\n' {{ (ansible_become_password | default('')) | string | quote }}\n"
-        dest: "{{ homebrew_tmp.path }}/askpass.sh"
-        mode: "0700"
-      no_log: true
-
-    - name: Download installer
-      ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
-        dest: "{{ homebrew_tmp.path }}/install.sh"
-        mode: "0700"
-
-    - name: Run installer
-      ansible.builtin.command: /bin/bash {{ homebrew_tmp.path }}/install.sh
-      environment:
-        NONINTERACTIVE: "1"
-        SUDO_ASKPASS: "{{ homebrew_tmp.path }}/askpass.sh"
-      args:
-        creates: "{{ homebrew_prefix }}/bin/brew"
-  always:
-    - name: Remove temp dir
+    - name: Mark Command Line Tools as installable on demand
       ansible.builtin.file:
-        path: "{{ homebrew_tmp.path }}"
+        path: /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+        state: touch
+        mode: "0644"
+
+    - name: Find Command Line Tools label
+      ansible.builtin.shell: |
+        set -o pipefail
+        /usr/sbin/softwareupdate -l 2>&1 | sed -n 's/^ *\* Label: \(Command Line Tools.*\)$/\1/p' | tail -n 1
+      args:
+        executable: /bin/bash
+      register: homebrew_clt_label
+      changed_when: false
+
+    - name: Install Command Line Tools package
+      ansible.builtin.command: /usr/sbin/softwareupdate -i "{{ homebrew_clt_label.stdout }}"
+      changed_when: true
+      when: homebrew_clt_label.stdout | length > 0
+  always:
+    - name: Remove Command Line Tools marker
+      ansible.builtin.file:
+        path: /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
         state: absent
-      when: homebrew_tmp.path is defined
+
+- name: Create Homebrew prefix owned by the user
+  ansible.builtin.file:
+    path: "{{ homebrew_prefix }}"
+    state: directory
+    owner: "{{ ansible_facts['user_id'] }}"
+    group: admin
+    mode: "0755"
+  become: true
+
+- name: Clone Homebrew
+  ansible.builtin.git:
+    repo: https://github.com/Homebrew/brew
+    dest: "{{ homebrew_prefix }}"
+    version: main
+    depth: 1
+    update: false
