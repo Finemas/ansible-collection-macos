@@ -200,36 +200,9 @@
   failed_when: false
   check_mode: false
 
+# sysadminctl -deleteUser -keepHome is unavailable on some images, so the record is deleted with dscl.
 - name: Delete accounts
-  ansible.builtin.command:
-    argv: "{{ ['sysadminctl', '-deleteUser', item.item] + (['-keepHome'] if users_absent_keep_home else []) }}"
-  loop: "{{ users_doomed.results }}"
+  ansible.builtin.include_tasks: delete.yml
+  loop: "{{ users_doomed.results | selectattr('rc', 'eq', 0) | map(attribute='item') | list }}"
   loop_control:
-    label: "{{ item.item }}"
-  changed_when: true
-  when: item.rc == 0
-
-- name: Report pending deletions (check mode)
-  ansible.builtin.command: /usr/bin/true
-  loop: "{{ users_doomed.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  check_mode: false
-  changed_when: true
-  when: ansible_check_mode and item.rc == 0
-
-# sysadminctl exits 0 on many failures.
-- name: Confirm deletion
-  ansible.builtin.command: dscl . -read /Users/{{ item.item }} UniqueID
-  loop: "{{ users_doomed.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  register: users_after
-  changed_when: false
-  failed_when: false
-  when: item.rc == 0 and not ansible_check_mode
-
-- name: Fail when an account survived deletion
-  ansible.builtin.fail:
-    msg: "Failed to delete account {{ users_after.results | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | map(attribute='item.item') | first }}"
-  when: users_after.results | default([]) | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length > 0
+    loop_var: users_name

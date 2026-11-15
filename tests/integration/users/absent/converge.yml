@@ -27,9 +27,43 @@
       changed_when: false
       when: not users_bob_home.stat.exists
 
-    - name: Apply role
+    - name: Make bob an admin
+      ansible.builtin.command: dseditgroup -o edit -a bob -t user admin
+      changed_when: false
+      when: not users_bob_home.stat.exists
+
+    # carl's home is removed, so a marker records that the fixture already ran.
+    - name: Look up carl marker
+      ansible.builtin.stat:
+        path: /var/tmp/finemas-users-absent-carl
+      register: users_carl_marker
+
+    - name: Create fixture account carl
+      ansible.builtin.user:
+        name: carl
+        password: Test-Pass-1
+      no_log: true
+      changed_when: false
+      when: not users_carl_marker.stat.exists
+
+    - name: Write carl marker
+      ansible.builtin.copy:
+        content: ""
+        dest: /var/tmp/finemas-users-absent-carl
+        force: false
+        mode: "0644"
+
+    - name: Delete bob and keep the home
       ansible.builtin.include_role:
         name: finemas.macos.users
       vars:
         users_absent: [bob]
+        users_ignore: "{{ users_recorded.stdout_lines }}"
+
+    - name: Delete carl and remove the home
+      ansible.builtin.include_role:
+        name: finemas.macos.users
+      vars:
+        users_absent: [carl]
+        users_absent_keep_home: false
         users_ignore: "{{ users_recorded.stdout_lines }}"

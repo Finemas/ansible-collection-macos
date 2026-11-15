@@ -31,7 +31,7 @@ argument_specs:
         type: list
         elements: str
         default: []
-        description: Accounts to delete with C(sysadminctl -deleteUser). Not the connection user or a guarded account.
+        description: Accounts to delete (record removed with C(dscl), group memberships cleared). Not the connection user or a guarded account.
       users_ignore:
         type: list
         elements: str
@@ -44,7 +44,7 @@ argument_specs:
       users_absent_keep_home:
         type: bool
         default: true
-        description: Keep the home directory of deleted accounts.
+        description: Keep the home directory of deleted accounts. When false, the home is removed only if it lies under C(/Users).
       users_initial_password:
         type: str
         no_log: true
